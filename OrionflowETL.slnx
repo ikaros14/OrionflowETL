@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="OrionflowETL.Core/OrionflowETL.Core.csproj" />
+  <Project Path="OrionflowETL.Tests/OrionflowETL.Tests.csproj" />
+</Solution>
