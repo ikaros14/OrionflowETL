@@ -15,11 +15,20 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\OrionflowETL.Adapters.Csv\OrionflowETL.Adapters.Csv.csproj" />
     <ProjectReference Include="..\OrionflowETL.Core\OrionflowETL.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Adapters\Mysql\" />
+    <Folder Include="Adapters\Mongo\" />
+    <Folder Include="Adapters\Api\" />
+    <Folder Include="Adapters\Postgresql\" />
+    <Folder Include="Adapters\SqlServer\" />
   </ItemGroup>
 
 </Project>
