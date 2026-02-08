@@ -32,9 +32,9 @@ jobs:
 
       - name: Publish to NuGet
         run: |
-          for package in $(find . -name "*.nupkg" -type f); do
+          find . -name "*.nupkg" ! -name "*.symbols.nupkg" -type f | while read package; do
             dotnet nuget push "$package" \
-              --api-key ${{ secrets.NUGET_API_KEY.API_KEY }} \
+              --api-key ${{ secrets.NUGET_API_KEY }} \
               --source https://api.nuget.org/v3/index.json \
               --skip-duplicate
           done
