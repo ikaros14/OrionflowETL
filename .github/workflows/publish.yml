@@ -31,10 +31,12 @@ jobs:
         run: dotnet pack --configuration Release --no-build
 
       - name: Publish to NuGet
+        env:
+          NUGET_KEY: ${{ secrets.NUGET_API_KEY.API_KEY }}
         run: |
           find . -name "*.nupkg" ! -name "*.symbols.nupkg" -type f | while read package; do
             dotnet nuget push "$package" \
-              --api-key ${{ secrets.NUGET_API_KEY }} \
+              --api-key "$NUGET_KEY" \
               --source https://api.nuget.org/v3/index.json \
               --skip-duplicate
           done
