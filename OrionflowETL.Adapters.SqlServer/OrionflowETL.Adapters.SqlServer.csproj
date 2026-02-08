@@ -1,0 +1,25 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+	  <PackageId>OrionflowETL.Adapters.SqlServer</PackageId>
+	  <Version>0.1.0</Version>
+	  <Authors>Absalón Hernández</Authors>
+	  <Description>
+		  SQL Server adapter for OrionflowETL.
+		  Provides an ISource implementation to read data using SELECT queries.
+	  </Description>
+	  <PackageTags>etl;sqlserver;orionflow</PackageTags>
+	  <PackageLicenseExpression>MIT</PackageLicenseExpression>
+	  <RepositoryUrl>https://github.com/ikaros14/OrionflowETL</RepositoryUrl>
+
+	  <Nullable>enable</Nullable>
+	  <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="6.1.4" />
+    <ProjectReference Include="..\OrionflowETL.Core\OrionflowETL.Core.csproj" />
+  </ItemGroup>
+
+</Project>

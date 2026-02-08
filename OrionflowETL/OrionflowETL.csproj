@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OrionflowETL.Adapters.Csv\OrionflowETL.Adapters.Csv.csproj" />
+    <ProjectReference Include="..\OrionflowETL.Adapters.SqlServer\OrionflowETL.Adapters.SqlServer.csproj" />
+    <ProjectReference Include="..\OrionflowETL.Core\OrionflowETL.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="input.csv">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>
