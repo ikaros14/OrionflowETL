@@ -10,7 +10,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\OrionflowETL.Adapters.Csv\OrionflowETL.Adapters.Csv.csproj" />
+    <ProjectReference Include="..\OrionflowETL.Adapters.MySql\OrionflowETL.Adapters.MySql.csproj" />
     <ProjectReference Include="..\OrionflowETL.Adapters.SqlServer\OrionflowETL.Adapters.SqlServer.csproj" />
+    <ProjectReference Include="..\OrionflowETL.Adapters.Postgres\OrionflowETL.Adapters.Postgres.csproj" />
     <ProjectReference Include="..\OrionflowETL.Core\OrionflowETL.Core.csproj" />
   </ItemGroup>
 

@@ -1,5 +1,7 @@
 <Solution>
   <Project Path="OrionflowETL.Adapters.Csv/OrionflowETL.Adapters.Csv.csproj" Id="1f524fb8-dc7d-4b56-8a18-f8c45188a3dd" />
+  <Project Path="OrionflowETL.Adapters.Postgres/OrionflowETL.Adapters.Postgres.csproj" />
+  <Project Path="OrionflowETL.Adapters.MySql/OrionflowETL.Adapters.MySql.csproj" />
   <Project Path="OrionflowETL.Adapters.SqlServer/OrionflowETL.Adapters.SqlServer.csproj" Id="022ae189-5817-4dd4-adba-eedfb03b3be0" />
   <Project Path="OrionflowETL.Core/OrionflowETL.Core.csproj" />
   <Project Path="OrionflowETL.Tests/OrionflowETL.Tests.csproj" />

@@ -1,11 +1,11 @@
 # OrionflowETL Usage Guide
 
-This document provides a practical guide for developers integrating **OrionflowETL** into their .NET applications. It covers the core concepts, standard workflows, and examples for common ETL scenarios.
+This document provides a practical guide for developers integrating **OrionflowETL** into their .NET applications. It covers core concepts, standard workflows, and examples for common ETL scenarios using CSV, SQL Server, PostgreSQL, and MySQL.
 
 **Prerequisites**:
 *   Basic knowledge of C# and .NET.
 *   An existing .NET project (Console, API, service, etc.).
-*   A SQL Server instance (if using SQL adapters).
+*   A database instance (SQL Server, PostgreSQL, or MySQL) if using database adapters.
 
 ---
 
@@ -17,14 +17,14 @@ OrionflowETL operates on a strictly linear pipeline model:
 
 1.  **Source (`ISource`)**: Reads data from an external origin (e.g., a CSV file or SQL query) and produces a stream of rows.
 2.  **Transform (`IPipelineStep`)**: A sequence of operations that modify, validate, or filter rows one by one. Steps are executed in the order defined.
-3.  **Sink (`IDataSink`)**: writes the processed rows to a destination (e.g., a CSV file or SQL table).
+3.  **Sink (`IDataSink`)**: Writes the processed rows to a destination (e.g., a CSV file or SQL table).
 4.  **Executor (`PipelineExecutor`)**: The engine that orchestrates the flow, passing data from source to steps and finally to the sink.
 
 ---
 
-## 1. Example: CSV to CSV Transformation
+## 3. Example: CSV to CSV Transformation
 
- This basic scenario reads a CSV file, cleans the text values, and writes the result to a new CSV file.
+This basic scenario reads a CSV file, cleans the text values, and writes the result to a new CSV file.
 
 ```csharp
 using OrionflowETL.Adapters.Csv;
@@ -53,7 +53,6 @@ public void RunCsvToCsv()
     };
 
     // 3. Configure Sink
-    // Note: CsvSink requires explicit column definitions for the output file
     var sink = new CsvSink(new CsvSinkOptions
     {
         Path = "cleaned_output.csv",
@@ -70,9 +69,9 @@ public void RunCsvToCsv()
 
 ---
 
-## 2. Example: CSV to SQL Server
+## 4. Example: CSV to SQL Server
 
-This is a common use case for data import tasks. It requires mapping the loosely typed CSV columns to specific database columns.
+This common use case maps loosely typed CSV columns to specific database columns.
 
 ```csharp
 using OrionflowETL.Adapters.Csv;
@@ -98,10 +97,10 @@ public void RunCsvToSql()
             { "full_name", "Name" }
         }),
 
-        // Filter out invalid rows (e.g. missing email)
+        // Filter out invalid rows
         new FilterRowsStep(row => !string.IsNullOrWhiteSpace(row.Get<string>("Email"))),
 
-        // Validate presence of required data before database insertion
+        // Validate required data
         new ValidateRequiredStep(new[] { "Name", "Email" })
     };
 
@@ -127,9 +126,9 @@ public void RunCsvToSql()
 
 ---
 
-## 3. Example: SQL Server to CSV
+## 5. Example: SQL Server to CSV
 
-Extracting data from a database and exporting it to a flat file.
+Extracting data from SQL Server and exporting to a file.
 
 ```csharp
 using OrionflowETL.Adapters.Csv.Sinks;
@@ -145,29 +144,102 @@ public void RunSqlToCsv()
         Query = "SELECT ClientId, ClientName, TotalOrders FROM [Sales].[Clients] WHERE IsActive = 1"
     });
 
-    // 2. Steps (Optional transformations)
-    var steps = new IPipelineStep[]
-    {
-        // Example: Ensure no nulls in critical fields
-        new ValidateRequiredStep(new[] { "ClientId", "ClientName" })
-    };
-
-    // 3. Sink
+    // 2. Sink (No transform steps in this example)
     var sink = new CsvSink(new CsvSinkOptions
     {
         Path = "active_clients_export.csv",
         Columns = new[] { "ClientId", "ClientName", "TotalOrders" }
     });
 
-    // 4. Execute
+    // 3. Execute with empty steps
     var executor = new PipelineExecutor();
-    var result = executor.Execute(source, steps, sink);
+    var result = executor.Execute(source, Enumerable.Empty<IPipelineStep>(), sink);
 }
 ```
 
 ---
 
-## Execution Results
+## 6. Example: PostgreSQL to MySQL
+
+Migrating data from PostgreSQL to MySQL.
+
+```csharp
+using OrionflowETL.Adapters.Postgres.Sources;
+using OrionflowETL.Adapters.MySql.Sinks;
+using OrionflowETL.Core.Execution;
+
+public void RunPostgresToMySql()
+{
+    // 1. Source (PostgreSQL)
+    var source = new PostgresSource(new PostgresSourceOptions
+    {
+        ConnectionString = "Server=localhost;Database=source_db;User Id=postgres;Password=password;",
+        Query = "SELECT id, product_name, price FROM products WHERE stock > 0"
+    });
+
+    // 2. Sink (MySQL)
+    var sink = new MySqlSink(new MySqlSinkOptions
+    {
+        ConnectionString = "Server=localhost;Database=target_db;Uid=root;Pwd=password;",
+        TableName = "products_catalog",
+        ColumnMapping = new Dictionary<string, string>
+        {
+            // Internal (Postgres col) -> Target (MySQL col)
+            { "id", "product_id" },
+            { "product_name", "name" },
+            { "price", "unit_price" }
+        }
+    });
+
+    // 3. Execute
+    var executor = new PipelineExecutor();
+    var result = executor.Execute(source, Enumerable.Empty<IPipelineStep>(), sink);
+}
+```
+
+---
+
+## 7. Example: MySQL to PostgreSQL
+
+Moving data from MySQL to PostgreSQL.
+
+```csharp
+using OrionflowETL.Adapters.MySql.Sources;
+using OrionflowETL.Adapters.Postgres.Sinks;
+using OrionflowETL.Core.Execution;
+
+public void RunMySqlToPostgres()
+{
+    // 1. Source (MySQL)
+    var source = new MySqlSource(new MySqlSourceOptions
+    {
+        ConnectionString = "Server=localhost;Database=legacy_app;Uid=root;Pwd=password;",
+        Query = "SELECT order_id, customer_email, total_amount FROM orders"
+    });
+
+    // 2. Sink (PostgreSQL)
+    var sink = new PostgresSink(new PostgresSinkOptions
+    {
+        ConnectionString = "Server=localhost;Database=analytics_db;User Id=postgres;Password=password;",
+        TableName = "public.sales_orders",
+        ColumnMapping = new Dictionary<string, string>
+        {
+            // Internal (MySQL col) -> Target (Postgres col)
+            { "order_id", "id" },
+            { "customer_email", "email" },
+            { "total_amount", "amount" }
+        }
+    });
+
+    // 3. Execute
+    var executor = new PipelineExecutor();
+    var result = executor.Execute(source, Enumerable.Empty<IPipelineStep>(), sink);
+}
+```
+
+---
+
+## 8. Handling Results
 
 The `PipelineExecutor.Execute` method returns an `ExecutionResult` object containing metrics and status information.
 
@@ -185,43 +257,43 @@ else if (result.Status == ExecutionStatus.PartialSuccess)
 }
 else if (result.Status == ExecutionStatus.Failed)
 {
-    Console.Error.WriteLine("Critical failure occurred.");
+    Console.Error.WriteLine("Critical failure occurred (e.g., connection lost).");
 }
 
 // 2. Inspect Metrics
-Console.WriteLine($"Read: {result.TotalRowsRead}");
-Console.WriteLine($"Processed: {result.TotalRowsProcessed}");
-Console.WriteLine($"Succeeded: {result.TotalRowsSucceeded}");
-Console.WriteLine($"Failed: {result.TotalRowsFailed}");
+Console.WriteLine($"Rows Read:      {result.TotalRowsRead}");
+Console.WriteLine($"Rows Processed: {result.TotalRowsProcessed}");
+Console.WriteLine($"Rows Succeeded: {result.TotalRowsSucceeded}");
+Console.WriteLine($"Rows Failed:    {result.TotalRowsFailed}");
 
 // 3. Inspect Errors
 foreach (var error in result.Errors)
 {
-    Console.WriteLine($"Error in step '{error.StepName}': {error.Message}");
-    // You can also access error.Exception and error.Row
+    Console.WriteLine($"Error processing row: {error.Message}");
+    // Access error.Exception for the full stack trace
 }
 ```
 
 ---
 
-## Best Practices
+## 9. Best Practices
 
-1.  **Normalization First**: Place `NormalizeHeadersStep` and `TrimStringsStep` at the beginning of your pipeline to ensure consistent data handling in subsequent steps.
-2.  **Filter Early**: Use `FilterRowsStep` as early as possible (after normalization) to avoid processing invalid data unnecessarily.
-3.  **Validate Late**: Use `ValidateRequiredStep` just before the Sink to ensure the data adheres to the destination's constraints (e.g., non-null columns).
-4.  **Rename Clarity**: Use `RenameColumnsStep` to convert external column names (source-specific) to your domain's internal naming convention.
+1.  **Normalization First**: Place `NormalizeHeadersStep` and `TrimStringsStep` at the beginning of your pipeline to ensure accurate column mapping later.
+2.  **Filter Early**: Use `FilterRowsStep` as early as possible to reduce unnecessary processing.
+3.  **Explicit Mapping**: Always use `RenameColumnsStep` or clean `ColumnMapping` settings in Sinks to decouple your internal logic from external database schema naming.
+4.  **Separation of Concerns**: Keep extraction (Source queries) simple and move complex logic to Transform steps or database views.
 
 ---
 
-## Scope and Limitations
+## 10. Scope and Limitations
 
 **OrionflowETL** is designed for everyday data integration tasks within .NET applications.
 
-*   **Supported Sources**: CSV, SQL Server.
-*   **Supported Sinks**: CSV, SQL Server.
+*   **Supported Sources**: CSV, SQL Server, PostgreSQL, MySQL.
+*   **Supported Sinks**: CSV, SQL Server, PostgreSQL, MySQL.
 *   **Execution Model**: Synchronous, in-process, row-by-row processing.
 
 **Limitations**:
-*   It does not support distributed processing (Spark-like behavior).
-*   It does not include a built-in scheduler (use Hangfire, Quartz.NET, or Windows Task Scheduler).
-*   It assumes the schema is relatively static during execution.
+*   **No Distributed Computing**: It runs in a single process. Not suitable for Big Data (TB/PB scale).
+*   **No Built-in Scheduler**: Use robust external schedulers like Hangfire, Quartz.NET, or OS tools (Cron/Task Scheduler).
+*   **No Schema Inference**: You must define mappings explicitly; the framework does not guess types or column matches.
