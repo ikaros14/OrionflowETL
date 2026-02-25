@@ -5,9 +5,10 @@ using OrionflowETL.Core.Abstractions;
 
 namespace OrionflowETL.Adapters.Postgres.Sinks;
 
-public class PostgresSink : IDataSink
+public class PostgresSink : IDataSink, IBatchAware
 {
     private readonly PostgresSinkOptions _options;
+    private readonly List<IRow> _buffer = new();
 
     public PostgresSink(PostgresSinkOptions options)
     {
@@ -25,49 +26,69 @@ public class PostgresSink : IDataSink
         }
     }
 
+    public void OnBatchBegin(int batchNumber, bool isFreshStart)
+    {
+        _buffer.Clear();
+    }
+
     public void Write(IRow row)
     {
         if (row == null) throw new ArgumentNullException(nameof(row));
 
-        var columns = new StringBuilder();
-        var values = new StringBuilder();
-        var parameters = new List<NpgsqlParameter>();
-        int index = 0;
-
+        // Validation against mapping
         foreach (var mapping in _options.ColumnMapping)
         {
-            var sourceCol = mapping.Key;
-            var targetCol = mapping.Value;
-
-            if (!row.Columns.Contains(sourceCol, StringComparer.OrdinalIgnoreCase))
+            if (!row.Columns.Contains(mapping.Key, StringComparer.OrdinalIgnoreCase))
             {
-               throw new InvalidOperationException($"Row is missing required column '{sourceCol}'.");
+                throw new InvalidOperationException($"Row is missing required column '{mapping.Key}'.");
             }
-
-            if (index > 0)
-            {
-                columns.Append(", ");
-                values.Append(", ");
-            }
-
-            // Quote column names to handle case-sensitivity and special characters safely
-            columns.Append($"\"{targetCol}\"");
-
-            var paramName = $"@p{index}";
-            values.Append(paramName);
-
-            var value = row[sourceCol] ?? DBNull.Value;
-            parameters.Add(new NpgsqlParameter(paramName, value));
-
-            index++;
         }
+
+        _buffer.Add(row);
+    }
+
+    public void OnBatchCommit(object? lastWindowValue)
+    {
+        if (_buffer.Count == 0) return;
+
+        var columns = string.Join(", ", _options.ColumnMapping.Values.Select(v => $"\"{v}\""));
+        var copyCommand = $"COPY {_options.TableName} ({columns}) FROM STDIN (FORMAT BINARY)";
 
         using var connection = new NpgsqlConnection(_options.ConnectionString);
         connection.Open();
 
-        using var command = new NpgsqlCommand($"INSERT INTO {_options.TableName} ({columns}) VALUES ({values})", connection);
-        command.Parameters.AddRange(parameters.ToArray());
+        using var transaction = connection.BeginTransaction();
         
-        command.ExecuteNonQuery();
+        try
+        {
+            using (var writer = connection.BeginBinaryImport(copyCommand))
+            {
+                foreach (var row in _buffer)
+                {
+                    writer.StartRow();
+                    foreach (var mapping in _options.ColumnMapping)
+                    {
+                        var value = row[mapping.Key] ?? DBNull.Value;
+                        writer.Write(value);
+                    }
+                }
+                writer.Complete();
+            }
+            transaction.Commit();
+        }
+        catch
+        {
+            transaction.Rollback();
+            throw;
+        }
+        finally
+        {
+            _buffer.Clear();
+        }
+    }
+
+    public void OnBatchRollback()
+    {
+        _buffer.Clear();
     }
 }

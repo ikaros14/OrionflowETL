@@ -420,3 +420,4 @@ FodyWeavers.xsd
 # add docs an skills
 docs/
 skills/
+.docs/

@@ -1,16 +1,17 @@
-using System.Text;
+using System.Data;
 using Microsoft.Data.SqlClient;
 using OrionflowETL.Core.Abstractions;
 
 namespace OrionflowETL.Adapters.SqlServer.Sinks;
 
 /// <summary>
-/// A sink that writes data to a SQL Server table using simple INSERT statements.
-/// Maintains no state and uses a new connection per row (v1 simplified model).
+/// A sink that writes data to a SQL Server table using SqlBulkCopy.
+/// Implements IBatchAware to accumulate rows in memory and insert them in batches.
 /// </summary>
-public sealed class SqlServerSink : IDataSink
+public sealed class SqlServerSink : IDataSink, IBatchAware
 {
     private readonly SqlServerSinkOptions _options;
+    private DataTable _buffer = new();
 
     public SqlServerSink(SqlServerSinkOptions options)
     {
@@ -21,61 +22,84 @@ public sealed class SqlServerSink : IDataSink
 
         if (string.IsNullOrWhiteSpace(_options.TableName))
             throw new ArgumentException("TableName cannot be empty", nameof(options));
+            
+        if (_options.ColumnMapping == null || _options.ColumnMapping.Count == 0)
+        {
+            throw new ArgumentException(
+                "ColumnMapping must be provided to correctly map source rows to the database table.", nameof(options));
+        }
+
+        InitializeDataTable();
+    }
+
+    private void InitializeDataTable()
+    {
+        _buffer = new DataTable(_options.TableName);
+        foreach (var mapping in _options.ColumnMapping!)
+        {
+            _buffer.Columns.Add(mapping.Key, typeof(object));
+        }
+    }
+
+    public void OnBatchBegin(int batchNumber, bool isFreshStart)
+    {
+        _buffer.Clear();
     }
 
     public void Write(IRow row)
     {
         if (row == null) throw new ArgumentNullException(nameof(row));
 
-        if (_options.ColumnMapping == null || _options.ColumnMapping.Count == 0)
-        {
-            throw new InvalidOperationException(
-                "ColumnMapping must be provided because IRow does not expose column names for auto-mapping.");
-        }
-
-        var columns = new StringBuilder();
-        var values = new StringBuilder();
-        var parameters = new List<SqlParameter>();
-        int index = 0;
-
-        foreach (var mapping in _options.ColumnMapping)
+        var dataRow = _buffer.NewRow();
+        foreach (var mapping in _options.ColumnMapping!)
         {
             var rowColumn = mapping.Key;
-            var dbColumn = mapping.Value;
-
-            if (index > 0)
-            {
-                columns.Append(", ");
-                values.Append(", ");
-            }
-
-            // Sanitize column name (basic)
-            columns.Append($"[{dbColumn}]");
-            
-            var paramName = $"@p{index}";
-            values.Append(paramName);
-
-            // Get value from row (throws if missing)
-            var value = row[rowColumn] ?? DBNull.Value;
-            parameters.Add(new SqlParameter(paramName, value));
-
-            index++;
+            dataRow[rowColumn] = row[rowColumn] ?? DBNull.Value;
         }
+        _buffer.Rows.Add(dataRow);
+    }
 
-        if (parameters.Count == 0)
+    public void OnBatchCommit(object? lastWindowValue)
+    {
+        if (_buffer.Rows.Count == 0)
         {
-             return;
+            return;
         }
-
-        var sql = $"INSERT INTO {_options.TableName} ({columns}) VALUES ({values})";
 
         using var connection = new SqlConnection(_options.ConnectionString);
-        using var command = new SqlCommand(sql, connection);
-        
-        command.CommandTimeout = _options.CommandTimeoutSeconds;
-        command.Parameters.AddRange(parameters.ToArray());
-
         connection.Open();
-        command.ExecuteNonQuery();
+        
+        using var transaction = connection.BeginTransaction();
+        
+        try
+        {
+            using var bulkCopy = new SqlBulkCopy(connection, SqlBulkCopyOptions.Default, transaction)
+            {
+                DestinationTableName = _options.TableName,
+                BulkCopyTimeout = _options.CommandTimeoutSeconds
+            };
+
+            foreach (var mapping in _options.ColumnMapping!)
+            {
+                bulkCopy.ColumnMappings.Add(mapping.Key, mapping.Value);
+            }
+
+            bulkCopy.WriteToServer(_buffer);
+            transaction.Commit();
+        }
+        catch
+        {
+            transaction.Rollback();
+            throw;
+        }
+        finally
+        {
+            _buffer.Clear();
+        }
+    }
+
+    public void OnBatchRollback()
+    {
+        _buffer.Clear();
     }
 }

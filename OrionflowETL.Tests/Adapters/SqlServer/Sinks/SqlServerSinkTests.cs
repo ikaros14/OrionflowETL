@@ -22,18 +22,15 @@ public class SqlServerSinkTests
     }
 
     [Fact]
-    public void Write_Throws_If_Mapping_Missing()
+    public void Constructor_Throws_If_Mapping_Missing()
     {
-        var sink = new SqlServerSink(new SqlServerSinkOptions 
+        var ex = Assert.Throws<ArgumentException>(() => new SqlServerSink(new SqlServerSinkOptions 
         { 
             ConnectionString = "S", 
             TableName = "T" 
             // No mapping
-        });
-
-        var row = new Row(new Dictionary<string, object?> { { "A", 1 } });
-
-        var ex = Assert.Throws<InvalidOperationException>(() => sink.Write(row));
+        }));
+        
         Assert.Contains("ColumnMapping must be provided", ex.Message);
     }
 

@@ -3,12 +3,13 @@ using OrionflowETL.Core.Abstractions;
 
 namespace OrionflowETL.Adapters.Csv.Sinks;
 
-public sealed class CsvSink : IDataSink, IDisposable
+public sealed class CsvSink : IDataSink, IBatchAware, IDisposable
 {
     private readonly CsvSinkOptions _options;
     private StreamWriter? _writer;
     private readonly List<string> _columns;
     private bool _isDisposed;
+    private long _initialBatchLength;
 
     public CsvSink(CsvSinkOptions options)
     {
@@ -27,6 +28,13 @@ public sealed class CsvSink : IDataSink, IDisposable
         }
 
         _columns = new List<string>(_options.Columns);
+    }
+
+    public void OnBatchBegin(int batchNumber, bool isFreshStart)
+    {
+        EnsureWriterInitialized();
+        _writer!.Flush();
+        _initialBatchLength = _writer.BaseStream.Position;
     }
 
     public void Write(IRow row)
@@ -57,6 +65,21 @@ public sealed class CsvSink : IDataSink, IDisposable
         _writer!.WriteLine(line);
     }
 
+    public void OnBatchCommit(object? lastWindowValue)
+    {
+        _writer?.Flush();
+    }
+
+    public void OnBatchRollback()
+    {
+        if (_writer != null)
+        {
+            _writer.Flush(); // Ensure underlying stream reflects final state
+            _writer.BaseStream.SetLength(_initialBatchLength); // Truncate to state at OnBatchBegin
+            _writer.BaseStream.Position = _initialBatchLength;
+        }
+    }
+
     private void EnsureWriterInitialized()
     {
         if (_writer != null) return;
@@ -66,11 +89,10 @@ public sealed class CsvSink : IDataSink, IDisposable
         var stream = new FileStream(_options.Path, FileMode.Append, FileAccess.Write, FileShare.Read);
         _writer = new StreamWriter(stream, _options.Encoding)
         {
-            AutoFlush = true 
+            AutoFlush = false // Changed for IBatchAware: explicit flush only
         };
 
         // Write header only if file didn't exist
-        // We do NOT check if the existing file has a header. We assume user configuration is correct.
         if (!fileExists)
         {
             var header = string.Join(_options.Delimiter, _columns.Select(c => Escape(c)));

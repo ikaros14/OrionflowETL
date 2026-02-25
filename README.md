@@ -9,6 +9,7 @@ OrionflowETL is a lightweight, explicit, and embedded ETL (Extract, Transform, L
 *   **Decoupled Adapters**: Sources and Sinks are independent of the transformation logic.
 *   **Embedded Execution**: Runs entirely within your .NET application process.
 *   **Memory Efficient**: Processes data row-by-row, minimizing memory footprint for large datasets.
+*   **High Performance**: Official database Sinks support built-in Bulk Inserts (via `IBatchAware`) to write thousands of rows efficiently inside transactions.
 
 ## What it is NOT
 

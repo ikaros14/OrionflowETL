@@ -1,12 +1,14 @@
+using System.Data;
 using System.Text;
 using MySqlConnector;
 using OrionflowETL.Core.Abstractions;
 
 namespace OrionflowETL.Adapters.MySql.Sinks;
 
-public class MySqlSink : IDataSink
+public class MySqlSink : IDataSink, IBatchAware
 {
     private readonly MySqlSinkOptions _options;
+    private DataTable _buffer = new();
 
     public MySqlSink(MySqlSinkOptions options)
     {
@@ -20,17 +22,30 @@ public class MySqlSink : IDataSink
 
         if (_options.ColumnMapping == null || _options.ColumnMapping.Count == 0)
             throw new ArgumentException("ColumnMapping is required.", nameof(options));
+
+        InitializeDataTable();
+    }
+
+    private void InitializeDataTable()
+    {
+        _buffer = new DataTable(_options.TableName);
+        foreach (var mapping in _options.ColumnMapping)
+        {
+            // The column name in the DataTable must be the target database column name
+            _buffer.Columns.Add(mapping.Value, typeof(object));
+        }
+    }
+
+    public void OnBatchBegin(int batchNumber, bool isFreshStart)
+    {
+        _buffer.Clear();
     }
 
     public void Write(IRow row)
     {
         if (row == null) throw new ArgumentNullException(nameof(row));
 
-        var columns = new StringBuilder();
-        var values = new StringBuilder();
-        var parameters = new List<MySqlParameter>();
-
-        int index = 0;
+        var dataRow = _buffer.NewRow();
         foreach (var mapping in _options.ColumnMapping)
         {
             var sourceCol = mapping.Key;
@@ -41,32 +56,46 @@ public class MySqlSink : IDataSink
                 throw new InvalidOperationException($"Row is missing required column '{sourceCol}'.");
             }
 
-            if (index > 0)
-            {
-                columns.Append(", ");
-                values.Append(", ");
-            }
-
-            // Using backticks for MySQL identifiers
-            columns.Append($"`{targetCol}`");
-            
-            var paramName = $"@p{index}";
-            values.Append(paramName);
-
-            var value = row[sourceCol] ?? DBNull.Value;
-            parameters.Add(new MySqlParameter(paramName, value));
-
-            index++;
+            dataRow[targetCol] = row[sourceCol] ?? DBNull.Value;
         }
 
-        var sql = $"INSERT INTO {_options.TableName} ({columns}) VALUES ({values})";
+        _buffer.Rows.Add(dataRow);
+    }
+
+    public void OnBatchCommit(object? lastWindowValue)
+    {
+        if (_buffer.Rows.Count == 0) return;
 
         using var connection = new MySqlConnection(_options.ConnectionString);
         connection.Open();
 
-        using var command = new MySqlCommand(sql, connection);
-        command.Parameters.AddRange(parameters.ToArray());
+        using var transaction = connection.BeginTransaction();
 
-        command.ExecuteNonQuery();
+        try
+        {
+            // Use MySqlBulkCopy for high performance bulk inserts. 
+            // MySqlConnector relies on LOAD DATA LOCAL INFILE internally.
+            var bulkCopy = new MySqlBulkCopy(connection, transaction)
+            {
+                DestinationTableName = _options.TableName
+            };
+
+            var bulkResult = bulkCopy.WriteToServer(_buffer);
+            transaction.Commit();
+        }
+        catch
+        {
+            transaction.Rollback();
+            throw;
+        }
+        finally
+        {
+            _buffer.Clear();
+        }
+    }
+
+    public void OnBatchRollback()
+    {
+        _buffer.Clear();
     }
 }

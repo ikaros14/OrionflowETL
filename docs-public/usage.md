@@ -274,9 +274,26 @@ foreach (var error in result.Errors)
 }
 ```
 
+## 9. Batch Processing and High Performance (IBatchAware)
+
+OrionflowETL is designed to be highly memory efficient by processing rows one by one. Starting with version 0.2.0, the core execution engine supports **Batch Processing** without sacrificing the low-memory footprint.
+
+When a Sink implements the `IBatchAware` interface, the `PipelineExecutor` automatically buffers the processed rows and commits them in blocks.
+
+### Database Bulk Inserts
+All offical Database Sinks (`SqlServerSink`, `PostgresSink`, `MySqlSink`) implement `IBatchAware`. Instead of executing an `INSERT` statement per row, they map the data into memory buffers and perform high-speed Bulk Inserts within a database transaction during the `OnBatchCommit` phase:
+
+*   **SQL Server**: Uses `SqlBulkCopy`.
+*   **PostgreSQL**: Uses Npgsql's extremely fast `BeginBinaryImport` (COPY FROM STDIN FORMAT BINARY).
+*   **MySQL**: Uses `MySqlBulkCopy`.
+
+This results in a **massive performance increase** for network I/O and database load when processing large amounts of data. It also guarantees transaction safety: if a row fails midway through a batch, the entire batch is rolled back (`OnBatchRollback`).
+
+*You do not need to configure anything extra; batching is handled automatically by the Executor when using these Sinks.*
+
 ---
 
-## 9. Best Practices
+## 10. Best Practices
 
 1.  **Normalization First**: Place `NormalizeHeadersStep` and `TrimStringsStep` at the beginning of your pipeline to ensure accurate column mapping later.
 2.  **Filter Early**: Use `FilterRowsStep` as early as possible to reduce unnecessary processing.
