@@ -70,8 +70,16 @@ public sealed class CastTypesStep : IPipelineStep
                     {
                         try
                         {
-                             // Invariant culture used for consistency
-                             var newValue = Convert.ChangeType(value, targetType, CultureInfo.InvariantCulture);
+                             object? newValue;
+                             if (value is string s && string.IsNullOrWhiteSpace(s))
+                             {
+                                 newValue = null;
+                             }
+                             else
+                             {
+                                 // Invariant culture used for consistency
+                                 newValue = Convert.ChangeType(value, targetType, CultureInfo.InvariantCulture);
+                             }
                              newValues[col] = newValue;
                              modified = true;
                         }
