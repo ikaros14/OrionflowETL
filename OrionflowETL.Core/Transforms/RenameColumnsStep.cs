@@ -9,18 +9,22 @@ namespace OrionflowETL.Core.Transforms;
 public sealed class RenameColumnsStep : IPipelineStep
 {
     private readonly IReadOnlyDictionary<string, string> _mapping;
+    private readonly bool _keepUnmapped;
 
     /// <summary>
     /// Initializes a new instance of the RenameColumnsStep class.
     /// </summary>
     /// <param name="mapping">Dictionary where Key is the old column name and Value is the new column name.</param>
-    public RenameColumnsStep(IDictionary<string, string> mapping)
+    /// <param name="keepUnmapped">If true (default), unmapped columns are kept. If false, they are dropped.</param>
+    public RenameColumnsStep(IDictionary<string, string> mapping, bool keepUnmapped = true)
     {
         if (mapping == null) throw new ArgumentNullException(nameof(mapping));
         if (mapping.Count == 0) throw new ArgumentException("Mapping cannot be empty", nameof(mapping));
         
         _mapping = new Dictionary<string, string>(mapping, StringComparer.OrdinalIgnoreCase);
+        _keepUnmapped = keepUnmapped;
     }
+
 
     /// <inheritdoc />
     public IRow Execute(IRow row)
@@ -47,6 +51,11 @@ public sealed class RenameColumnsStep : IPipelineStep
             if (_mapping.TryGetValue(col, out var newName))
             {
                 targetName = newName;
+            }
+            else if (!_keepUnmapped)
+            {
+                // If column is not mapped and we shouldn't keep unmapped, skip it
+                continue;
             }
 
             if (newValues.ContainsKey(targetName))
