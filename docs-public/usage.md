@@ -274,7 +274,199 @@ foreach (var error in result.Errors)
 }
 ```
 
-## 9. Batch Processing and High Performance (IBatchAware)
+---
+
+## 9. Advanced Transformations: Row Hashing
+
+The `HashRowStep` computes a unique fingerprint (SHA256 or MD5) of a row based on a selection of columns. This is essential for **Change Data Capture (CDC)** or **Delta Loads** where you need to detect if a row has changed since the last execution.
+
+```csharp
+using OrionflowETL.Core.Transforms;
+
+var steps = new IPipelineStep[]
+{
+    new HashRowStep(
+        targetColumn: "__row_hash",
+        columns: new[] { "FirstName", "LastName", "Address", "Salary" },
+        algorithm: HashAlgorithmType.SHA256
+    )
+};
+```
+
+*Note: Null values are handled using a stable separator to avoid collisions.*
+
+---
+
+## 10. Pattern: SQL Server to SQL Server Upsert
+
+Since high-performance database sinks use `SqlBulkCopy` (which is insert-only), the recommended pattern for performing an **Upsert** (Update if exists, Insert if not) is the **Staging Table + MERGE** pattern.
+
+### Step-by-Step Upsert Workflow:
+
+1.  **Define a Staging Table**: Create a temporary or staging table in the target database with the same schema as the target.
+2.  **Bulk Insert to Staging**: Use `OrionflowETL` to move data from the source to the staging table.
+3.  **Execute MERGE**: Run a native SQL `MERGE` statement to synchronize the staging table with the production table.
+
+```csharp
+// 1. Execute the Pipeline (Source -> Staging Table)
+var source = new SqlServerSource(new SqlServerOptions { Query = "SELECT * FROM SourceUsers" });
+var stagingSink = new SqlServerSink(new SqlServerSinkOptions 
+{ 
+    TableName = "stg.Users", 
+    ConnectionString = targetConnStr,
+    ColumnMapping = myMappings 
+});
+
+var executor = new PipelineExecutor();
+executor.Execute(source, Enumerable.Empty<IPipelineStep>(), stagingSink);
+
+// 2. Execute the MERGE command manually
+using (var conn = new SqlConnection(targetConnStr))
+{
+    conn.Open();
+    var mergeSql = @"
+        MERGE dbo.Users AS target
+        USING stg.Users AS source
+        ON (target.UserId = source.UserId)
+        WHEN MATCHED THEN
+            UPDATE SET target.Email = source.Email, target.ModifiedAt = GETDATE()
+        WHEN NOT MATCHED THEN
+            INSERT (UserId, Email, CreatedAt)
+            VALUES (source.UserId, source.Email, GETDATE());
+            
+        -- Cleanup staging
+        TRUNCATE TABLE stg.Users;";
+        
+    using var cmd = new SqlCommand(mergeSql, conn);
+    cmd.ExecuteNonQuery();
+}
+```
+
+### Option B: Clean Sync (In-Memory Comparison)
+
+If you cannot modify the target schema to add a `_row_hash` column, you can perform the comparison entirely in memory. This is ideal for medium-sized catalogs (e.g., < 100k rows).
+
+1.  **Pre-load Existing Hashes**: Fetch keys and a "state fingerprint" from the target into a `Dictionary`.
+2.  **Filter in Pipeline**: Use `FilterRowsStep` to compare the incoming row's hash against the dictionary.
+
+```csharp
+// 1. Pre-load existing state (e.g., ID + Hash of searchable fields)
+var existingHashes = new Dictionary<string, string>();
+using (var conn = new SqlConnection(targetConnStr))
+{
+    conn.Open();
+    var query = "SELECT ProductId, HASHBYTES('SHA2_256', CONCAT(Name, Price, Category)) as StateHash FROM Products";
+    using var cmd = new SqlCommand(query, conn);
+    using var reader = cmd.ExecuteReader();
+    while (reader.Read()) 
+    {
+        existingHashes[reader["ProductId"].ToString()] = Convert.ToHexString((byte[])reader["StateHash"]).ToLower();
+    }
+}
+
+// 2. Define the Pipeline
+var source = new SqlServerSource(new SqlServerOptions { Query = "SELECT * FROM SourceProducts" });
+var steps = new IPipelineStep[]
+{
+    // Compute current hash for the incoming row
+    new HashRowStep("__current_hash", new[] { "Name", "Price", "Category" }),
+
+    // CROSS-REFERENCE: Keep only if new or changed
+    new FilterRowsStep(row => 
+    {
+        var id = row.Get<string>("ProductId");
+        var currentHash = row.Get<string>("__current_hash");
+
+        if (!existingHashes.TryGetValue(id, out var oldHash))
+            return true; // New record
+
+        return currentHash != oldHash; // Changed record
+    })
+};
+
+// 3. Sink (Using the Staging pattern as in Option A to handle Updates + Inserts)
+executor.Execute(source, steps, stagingSink);
+```
+
+---
+
+## 11. Advanced Scenario: Multi-Source Consolidation
+
+When consolidating data from multiple independent sources (e.g., three different Business Units) into a single centralized database, you must address **ID collisions** and **data attribution**.
+
+### Architectural Pattern:
+1.  **Orchestrator**: A loop in your host application iterates through the source connection strings.
+2.  **Attribution**: Use `SetConstantStep` to tag each row with its source origin.
+3.  **Composite Keys**: Use `(SourceId, EntityId)` as the unique key in the target.
+
+```csharp
+var sources = new[] 
+{
+    new { BuId = "BU_NORTH", Conn = "..." },
+    new { BuId = "BU_SOUTH", Conn = "..." },
+    new { BuId = "BU_WEST",  Conn = "..." }
+};
+
+foreach (var sourceInfo in sources)
+{
+    Log.Information($"Starting sync for {sourceInfo.BuId}");
+
+    var source = new SqlServerSource(new SqlServerOptions { 
+        ConnectionString = sourceInfo.Conn, 
+        Query = "SELECT * FROM Transactions WHERE IsProcessed = 0" 
+    });
+
+    var steps = new IPipelineStep[]
+    {
+        // 1. Tag the data source
+        new SetConstantStep("BusinessUnit", sourceInfo.BuId),
+        
+        // 2. Standardize
+        new TrimStringsStep(),
+        
+        // 3. Add load metadata
+        new AddTimestampStep("ProcessedAt")
+    };
+
+    var sink = new SqlServerSink(new SqlServerSinkOptions {
+        TableName = "stg.ConsolidatedTransactions", // Bulk insert into staging
+        ConnectionString = targetConnStr,
+        ColumnMapping = GetMappings()
+    });
+
+    // Execute for this BU
+    executor.Execute(source, steps, sink);
+    
+    // Post-execution: Run MERGE for this specific BU
+    RunMergeForBU(sourceInfo.BuId);
+}
+```
+
+---
+
+## 12. Error Handling Strategies
+
+The `PipelineExecutor` supports different strategies for dealing with row-level exceptions via the `ErrorStrategy` enum:
+
+| Strategy | Description |
+| :--- | :--- |
+| **FailFast** | (Default) Aborts the entire pipeline execution as soon as the first error occurs. |
+| **ContinueOnError** | Collects the error in the `ExecutionResult` and proceeds with the next row. |
+
+### Usage:
+
+```csharp
+var result = executor.Execute(source, steps, sink, ErrorStrategy.ContinueOnError);
+
+if (result.TotalRowsFailed > 0)
+{
+    Console.WriteLine($"Warning: {result.TotalRowsFailed} rows failed processing.");
+}
+```
+
+---
+
+## 12. Batch Processing and High Performance (IBatchAware)
 
 OrionflowETL is designed to be highly memory efficient by processing rows one by one. Starting with version 0.2.0, the core execution engine supports **Batch Processing** without sacrificing the low-memory footprint.
 

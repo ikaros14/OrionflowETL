@@ -9,7 +9,7 @@ OrionflowETL is a lightweight, explicit, and embedded ETL (Extract, Transform, L
 *   **Decoupled Adapters**: Sources and Sinks are independent of the transformation logic.
 *   **Embedded Execution**: Runs entirely within your .NET application process.
 *   **Memory Efficient**: Processes data row-by-row, minimizing memory footprint for large datasets.
-*   **High Performance**: Official database Sinks support built-in Bulk Inserts (via `IBatchAware`) to write thousands of rows efficiently inside transactions.
+*   **High Performance**: Official database Sinks support built-in Bulk Inserts (via `IBatchAware`) to write thousands of rows efficiently inside transactions (SQL Server, PostgreSQL, and MySQL supported).
 
 ## What it is NOT
 
@@ -96,17 +96,20 @@ The following adapters are currently implemented and validated:
 | :--- | :--- | :--- |
 | **CSV** | Source & Sink | Full Support |
 | **SQL Server** | Source & Sink | Full Support |
+| **PostgreSQL** | Source & Sink | Full Support |
+| **MySQL** | Source & Sink | Full Support |
 
 ## Roadmap
 
 The following adapters and features are under consideration for future releases. *This roadmap is indicative and subject to change.*
 
 *   **Planned Adapters**:
-    *   PostgreSQL (Source & Sink)
-    *   MySQL (Source & Sink)
     *   JSON File (Source & Sink)
-*   **Under Consideration**:
     *   REST API Source
+*   **Infrastructure & Performance**:
+    *   **Refactor Asíncrono (`IAsyncEnumerable`)**: Core migration to non-blocking I/O.
+    *   **Parallel Execution**: TPL Dataflow integration for step processing.
+*   **Under Consideration**:
     *   Azure Blob Storage / Amazon S3
     *   Parquet Support
 
