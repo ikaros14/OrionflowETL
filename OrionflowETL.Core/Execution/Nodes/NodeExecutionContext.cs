@@ -24,6 +24,11 @@ public class NodeExecutionContext
     /// </summary>
     public IAsyncEnumerable<Row>? InputStream { get; init; }
 
+    /// <summary>
+    /// For multi-input nodes (e.g. Join), provided as a dictionary keyed by input ID.
+    /// </summary>
+    public Dictionary<string, IAsyncEnumerable<Row>> InputStreams { get; init; } = new();
+
     /// <summary>Node-specific configuration dictionary (maps to configSchema from the Designer).</summary>
     public Dictionary<string, object> Configuration { get; init; } = new();
 

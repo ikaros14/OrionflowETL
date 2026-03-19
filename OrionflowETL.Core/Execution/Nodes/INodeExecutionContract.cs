@@ -21,4 +21,9 @@ public interface INodeExecutionContract
         NodeExecutionContext context,
         CancellationToken cancellationToken
     );
+
+    /// <summary>
+    /// Returns node-specific metrics after execution has completed (e.g. RowsFiltered).
+    /// </summary>
+    System.Collections.Generic.Dictionary<string, string> GetCustomMetrics() => new();
 }

@@ -26,6 +26,9 @@ public class NodeExecutionResult
     public List<string> Errors { get; init; } = new();
     public List<string> Warnings { get; init; } = new();
 
+    /// <summary>Optional node-specific metrics (e.g., RowsFiltered, RowsUpdated).</summary>
+    public Dictionary<string, string> CustomMetrics { get; init; } = new();
+
     /// <summary>
     /// Performance and custom metrics captured during execution
     /// (e.g. "db_latency_ms", "bytes_read").

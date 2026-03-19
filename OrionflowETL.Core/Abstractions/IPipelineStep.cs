@@ -1,4 +1,4 @@
-﻿namespace OrionflowETL.Core.Abstractions
+namespace OrionflowETL.Core.Abstractions
 {
    /// <summary>
    /// Defines a step in a data processing pipeline that transforms an input row and returns the processed result.
@@ -16,6 +16,11 @@
         /// <returns>An <see cref="IRow"/> representing the processed result. Returns null if the operation does not produce a
         /// result.</returns>
         IRow Execute(IRow row);
+
+        /// <summary>
+        /// Gets node-specific metrics after execution (e.g. RowsFiltered).
+        /// </summary>
+        System.Collections.Generic.Dictionary<string, string> GetMetrics() => new();
     }
 }
 
