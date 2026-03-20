@@ -104,7 +104,7 @@ public sealed class PipelineExecutor : IPipelineExecutor
                 null, 
                 "Execute", 
                 typeof(PipelineExecutor), 
-                PipelineStage.Source, 
+                PipelineStage.Extract, 
                 ex, 
                 $"Critical pipeline failure: {ex.Message}");
             errors.Add(errorContext);

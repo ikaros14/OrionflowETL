@@ -12,7 +12,7 @@ public sealed class ErrorContext
     /// <summary>
     /// Gets the row being processed when the error occurred.
     /// </summary>
-    public IRow Row { get; }
+    public IRow? Row { get; }
 
     /// <summary>
     /// Gets the name of the step or component where the error occurred.
@@ -54,7 +54,7 @@ public sealed class ErrorContext
     /// <param name="exception">The exception thrown.</param>
     /// <param name="message">A descriptive message.</param>
     public ErrorContext(
-        IRow row,
+        IRow? row,
         string stepName,
         Type stepType,
         PipelineStage stage,
