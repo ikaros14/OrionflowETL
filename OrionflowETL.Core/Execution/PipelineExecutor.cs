@@ -1,4 +1,4 @@
-﻿using OrionflowETL.Core.Abstractions;
+using OrionflowETL.Core.Abstractions;
 using System;
 using System.Collections.Generic;
 
@@ -42,47 +42,74 @@ public sealed class PipelineExecutor : IPipelineExecutor
         long totalRowsFailed = 0;
         var errors = new List<ErrorContext>();
 
-        foreach (var row in source.Read())
-        {
-            totalRowsRead++;
-            totalRowsProcessed++;
+        // 1. Setup batching if sink supports it
+        var batchedSink = sink as IBatchAware;
+        batchedSink?.OnBatchBegin(1, true);
 
-            try
+        try
+        {
+            foreach (var row in source.Read())
             {
-                var current = row;
-                foreach (var step in steps)
+                totalRowsRead++;
+                totalRowsProcessed++;
+
+                try
                 {
-                    current = step.Execute(current);
-                    if (current == null)
+                    var current = row;
+                    foreach (var step in steps)
                     {
-                        break;
+                        current = step.Execute(current);
+                        if (current == null)
+                        {
+                            break;
+                        }
+                    }
+
+                    if (current != null)
+                    {
+                        sink.Write(current);
+                        totalRowsSucceeded++;
                     }
                 }
-
-                if (current != null)
+                catch (Exception ex)
                 {
-                    sink.Write(current);
-                    totalRowsSucceeded++;
+                    totalRowsFailed++;
+                    var errorContext = new ErrorContext(
+                        row,
+                        ex.TargetSite?.Name ?? "Unknown",
+                        ex.TargetSite?.DeclaringType ?? typeof(UnknownStep),
+                        PipelineStage.Transform,
+                        ex,
+                        $"Error processing row: {ex.Message}"
+                    );
+                    errors.Add(errorContext);
+
+                    if (errorStrategy == ErrorStrategy.FailFast)
+                    {
+                        batchedSink?.OnBatchRollback();
+                        return new ExecutionResult(ExecutionStatus.Failed, totalRowsRead, totalRowsProcessed, totalRowsSucceeded, totalRowsFailed, errors);
+                    }
                 }
             }
-            catch (Exception ex)
-            {
-                totalRowsFailed++;
-                var errorContext = new ErrorContext(
-                    row,
-                    ex.TargetSite?.Name ?? "Unknown", 
-                    ex.TargetSite?.DeclaringType ?? typeof(UnknownStep),
-                    PipelineStage.Transform, 
-                    ex,
-                    $"Error processing row: {ex.Message}"
-                );
-                errors.Add(errorContext);
 
-                if (errorStrategy == ErrorStrategy.FailFast)
-                {
-                    return new ExecutionResult(ExecutionStatus.Failed, totalRowsRead, totalRowsProcessed, totalRowsSucceeded, totalRowsFailed, errors);
-                }
-            }
+            // 2. Commit if we made it through all rows (or PartialSuccess allowed)
+            batchedSink?.OnBatchCommit(null);
+        }
+        catch (Exception ex)
+        {
+            // Catch-all for source read errors or other catastrophic failures
+            batchedSink?.OnBatchRollback();
+            
+            var errorContext = new ErrorContext(
+                null, 
+                "Execute", 
+                typeof(PipelineExecutor), 
+                PipelineStage.Source, 
+                ex, 
+                $"Critical pipeline failure: {ex.Message}");
+            errors.Add(errorContext);
+            
+            return new ExecutionResult(ExecutionStatus.Failed, totalRowsRead, totalRowsProcessed, totalRowsSucceeded, totalRowsFailed, errors);
         }
 
         var status = errors.Count > 0 ? ExecutionStatus.PartialSuccess : ExecutionStatus.Success;
