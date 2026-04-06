@@ -36,13 +36,21 @@ public class CsvSourceNode : BasePipelineNode
         [EnumeratorCancellation] CancellationToken ct)
     {
         using var reader = new StreamReader(path);
+#if NET7_0_OR_GREATER
         string? header = await reader.ReadLineAsync(ct);
+#else
+        string? header = await reader.ReadLineAsync();
+#endif
         if (header == null) yield break;
 
         var columns = header.Split(',');
 
         string? line;
+#if NET7_0_OR_GREATER
         while ((line = await reader.ReadLineAsync(ct)) != null)
+#else
+        while ((line = await reader.ReadLineAsync()) != null)
+#endif
         {
             ct.ThrowIfCancellationRequested();
             var values = line.Split(',');

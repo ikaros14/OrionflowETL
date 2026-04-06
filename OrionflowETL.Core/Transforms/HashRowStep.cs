@@ -53,7 +53,11 @@ public sealed class HashRowStep : IPipelineStep
             throw new ArgumentException("targetColumn cannot be null or empty.", nameof(targetColumn));
 
         _targetColumn = targetColumn;
+#if NET8_0_OR_GREATER
         _columns      = columns ?? [];
+#else
+        _columns      = columns ?? Array.Empty<string>();
+#endif
         _algorithm    = algorithm;
     }
 
@@ -64,7 +68,11 @@ public sealed class HashRowStep : IPipelineStep
     {
         if (row == null) throw new ArgumentNullException(nameof(row));
 
+#if NET8_0_OR_GREATER
         var columnsToHash = _columns.Length > 0 ? _columns : [.. row.Columns];
+#else
+        var columnsToHash = _columns.Length > 0 ? _columns : System.Linq.Enumerable.ToArray(row.Columns);
+#endif
         var hashInput     = BuildHashInput(row, columnsToHash);
         var hashValue     = ComputeHash(hashInput, _algorithm);
 
