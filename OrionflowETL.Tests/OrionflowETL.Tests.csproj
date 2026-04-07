@@ -9,6 +9,7 @@
     <SuppressTfmSupportBuildErrors>true</SuppressTfmSupportBuildErrors>
     <SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
   </PropertyGroup>
 
   <ItemGroup>
