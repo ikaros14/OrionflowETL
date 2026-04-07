@@ -8,6 +8,7 @@
     <IsPackable>false</IsPackable>
     <SuppressTfmSupportBuildErrors>true</SuppressTfmSupportBuildErrors>
     <SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
 
   <ItemGroup>
