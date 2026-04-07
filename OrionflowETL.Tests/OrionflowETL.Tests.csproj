@@ -10,6 +10,7 @@
     <SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
+    <RollForward>Major</RollForward>
   </PropertyGroup>
 
   <ItemGroup>
