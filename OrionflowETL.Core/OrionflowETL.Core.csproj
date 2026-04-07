@@ -26,6 +26,7 @@
 	  <GenerateDocumentationFile>true</GenerateDocumentationFile>
           <SuppressTfmSupportBuildErrors>true</SuppressTfmSupportBuildErrors>
           <SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
+          <IsTestProject>false</IsTestProject>
   </PropertyGroup>
 
   <ItemGroup>

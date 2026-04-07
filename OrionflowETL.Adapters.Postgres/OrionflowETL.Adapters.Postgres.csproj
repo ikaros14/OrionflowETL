@@ -7,6 +7,7 @@
     <LangVersion>latest</LangVersion>
     <SuppressTfmSupportBuildErrors>true</SuppressTfmSupportBuildErrors>
     <SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
+    <IsTestProject>false</IsTestProject>
     <PackageId>OrionflowETL.Adapters.Postgres</PackageId>
     <Version>0.4.0</Version>
     <Authors>Absalón Hernández</Authors>
